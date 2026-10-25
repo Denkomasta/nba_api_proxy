@@ -1,0 +1,5 @@
+# Keep LF endings even when edited on Windows (shell, nginx and Docker files run on Linux)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
