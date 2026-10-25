@@ -1,0 +1,27 @@
+# Runs the whole app locally: docker compose up -d --build, then open http://localhost:8765
+# (stats.nba.com blocks cloud server IPs, so this is meant for your own machine, not a VPS.)
+name: nba-api-proxy
+
+services:
+  frontend: # nginx serves the SPA and proxies /api to http://backend:8000
+    build: frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:${PORT:-8765}:80"
+
+  backend:
+    build: backend
+    restart: unless-stopped
+    environment:
+      NBA_API_PROXY: ${NBA_API_PROXY:-}
+      NBA_TIMEOUT: ${NBA_TIMEOUT:-30}
+      NBA_REQUEST_DELAY: ${NBA_REQUEST_DELAY:-0.6}
+      MAX_GAMES: ${MAX_GAMES:-1500}
+      EXPORT_TTL_HOURS: ${EXPORT_TTL_HOURS:-24}
+    volumes:
+      - data:/data # play-by-play cache + finished exports
+
+volumes:
+  data:
