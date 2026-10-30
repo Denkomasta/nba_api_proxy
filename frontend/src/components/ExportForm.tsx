@@ -10,7 +10,7 @@ const datasets: Record<Dataset, { label: string; description: string }> = {
   playbyplay: {
     label: 'Play-by-play',
     description:
-      'Every event of every matching game: the event log, with game_id as the case. One request per game ' +
+      'Every event of every matching game: the event log, with game_id or possession_id as the case. One request per game ' +
       '(about 1–3 s each), cached games are instant.',
   },
 }

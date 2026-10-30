@@ -20,6 +20,7 @@ from typing import Any
 
 from . import nba
 from .models import ExportRequest, Filters, Job
+from .possessions import assign_possessions
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +29,17 @@ EXPORT_TTL = float(os.getenv("EXPORT_TTL_HOURS", "24")) * 3600
 MAX_GAMES = int(os.getenv("MAX_GAMES", "1500"))
 
 # Columns added in front of the raw play-by-play columns
-PBP_COLUMNS = ["game_id", "game_date", "home_team", "away_team", "event_index", "game_seconds", "source"]
+PBP_COLUMNS = [
+    "game_id",
+    "possession_id",
+    "possession_team",
+    "game_date",
+    "home_team",
+    "away_team",
+    "event_index",
+    "game_seconds",
+    "source",
+]
 
 
 class Cancelled(Exception):
@@ -140,8 +151,11 @@ class JobManager:
                             "home_team": game.get("home_team"),
                             "away_team": game.get("away_team"),
                         }
-                        for index, event in enumerate(events):
+                        possessions = assign_possessions(events)
+                        for index, (event, (possession, team)) in enumerate(zip(events, possessions)):
                             row = context | {
+                                "possession_id": f"{game_id}-{possession:03d}",
+                                "possession_team": team,
                                 "event_index": index,
                                 "game_seconds": nba.game_seconds(event.get("period"), event.get("clock")),
                                 "source": source,

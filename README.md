@@ -40,7 +40,9 @@ These columns come first, followed by every raw column the NBA feed returns:
 
 | Column | Meaning |
 |--------|---------|
-| `game_id` | Case ID |
+| `game_id` | Case ID for one case per game |
+| `possession_id` | Case ID for one case per possession, e.g. `0022500001-042` |
+| `possession_team` | Team with the ball in that possession |
 | `game_date`, `home_team`, `away_team` | Game context |
 | `event_index` | Position of the event within the game (0, 1, 2, …). Use it as the order. |
 | `game_seconds` | Elapsed game time: 12-minute quarters, 5-minute overtimes |
@@ -57,6 +59,12 @@ The two feeds name some values differently. For example, live has `actionType` `
 `shotResult`, while stats has `Made Shot` or `Missed Shot`. Keep one export within one era, or map the
 values when you analyze the data. In CSV, list values such as `qualifiers` and `personIdsFilter` are
 joined with `|`.
+
+A possession ends with a made basket, a last free throw, a turnover, a defensive rebound or the end of
+a period, so an offensive rebound continues it. Possessions are worked out from the events in
+`backend/app/possessions.py`, the same way for both feeds, and the raw `possession` column of the live
+feed is kept next to them. Substitutions, timeouts and other dead-ball events go with the possession
+that follows them, so filter them out if they would clutter the process model.
 
 ### How exports run
 
