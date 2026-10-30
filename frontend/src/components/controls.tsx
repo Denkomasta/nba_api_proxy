@@ -1,5 +1,6 @@
 import { Button } from 'denval-ui'
 import type { ReactNode } from 'react'
+import { type Control, type FieldPath, type FieldPathValue, type FieldValues, useController } from 'react-hook-form'
 
 // Form controls denval-ui doesn't have yet, built on its colour tokens
 
@@ -51,4 +52,20 @@ export function Segmented<T extends string>({
       </div>
     </fieldset>
   )
+}
+
+/** `Segmented` connected to a field of a react-hook-form form. */
+export function SegmentedField<T extends FieldValues, N extends FieldPath<T>>({
+  control,
+  name,
+  label,
+  choices,
+}: {
+  control: Control<T>
+  name: N
+  label: string
+  choices: Choice<FieldPathValue<T, N> & string>[]
+}) {
+  const { field } = useController({ control, name })
+  return <Segmented label={label} value={field.value} choices={choices} onChange={field.onChange} />
 }
