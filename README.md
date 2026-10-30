@@ -22,7 +22,7 @@ To change the port or other settings, copy `.env.example` to `.env` and edit it.
 from cloud hosting IPs (AWS, Azure, Hetzner, …). Home and university connections work.
 
 - **Backend:** Python, FastAPI and `nba_api` (`backend/`)
-- **Frontend:** React, TypeScript, Tailwind CSS and Vite (`frontend/`), served by nginx, which also proxies `/api`
+- **Frontend:** React, TypeScript, Tailwind CSS, [`denval-ui`](https://github.com/Denkomasta/denval-ui) and Vite (`frontend/`), served by nginx, which also proxies `/api`
 
 ## Datasets
 

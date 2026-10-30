@@ -1,4 +1,5 @@
-import { type FormEvent, useState } from 'react'
+import { Button } from 'denval-ui'
+import { type SubmitEvent, useState } from 'react'
 import { api, type Dataset, type Filters, type Format, type Job, type Options } from '../api'
 import { Field, inputClass, Segmented } from './controls'
 
@@ -32,7 +33,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
 
   const noTimestamps = dataset === 'playbyplay' && season !== '' && season < options.first_live_season
 
-  async function submit(event: FormEvent) {
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     const filters: Filters = {
       season: season || undefined,
@@ -70,7 +71,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
           onChange={setDataset}
           choices={(Object.keys(datasets) as Dataset[]).map((value) => ({ value, label: datasets[value].label }))}
         />
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{datasets[dataset].description}</p>
+        <p className="mt-2 text-label text-muted">{datasets[dataset].description}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -137,7 +138,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
         />
       </div>
 
-      <div className="flex flex-wrap items-end gap-4 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+      <div className="flex flex-wrap items-end gap-4 border-t border-divider pt-6">
         <div className="w-40">
           <Segmented
             label="File format"
@@ -149,17 +150,13 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
             ]}
           />
         </div>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="ml-auto rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50 dark:text-zinc-950"
-        >
+        <Button type="submit" variant="solid" disabled={submitting} className="ml-auto">
           {submitting ? 'Starting…' : 'Start export'}
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-label text-red-700 dark:bg-red-950/50 dark:text-red-300">
           {error}
         </p>
       )}

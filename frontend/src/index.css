@@ -1,22 +1,22 @@
 @import 'tailwindcss';
+@import 'denval-ui/theme.css';
+@source '../node_modules/denval-ui/dist';
 
 @theme {
-  --color-accent: var(--accent);
+  /* Two columns of forms and exports need more room than the default page width */
+  --container-page: var(--container-6xl);
 }
 
 :root {
-  --accent: var(--color-orange-600);
-  color-scheme: light dark;
+  --dv-accent: var(--color-orange-700);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent: var(--color-orange-400);
-  }
+.dark {
+  --dv-accent: var(--color-orange-400);
 }
 
 @layer base {
   body {
-    @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+    @apply bg-background text-foreground antialiased;
   }
 }

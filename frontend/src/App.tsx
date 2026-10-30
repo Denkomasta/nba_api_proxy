@@ -1,3 +1,4 @@
+import { Card, Container, Heading, Section } from 'denval-ui'
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Job, type Options } from './api'
 import { ExportForm } from './components/ExportForm'
@@ -28,42 +29,38 @@ export default function App() {
   }, [active, refresh])
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <Container className="py-10">
       <header className="mb-10">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">NBA data export</h1>
-        <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
+        <Heading as="h1" variant="display">
+          NBA data export
+        </Heading>
+        <p className="mt-3 max-w-2xl text-muted">
           Pick filters, start an export, download it as CSV or JSON. Data comes from stats.nba.com and the NBA live feed
-          via <code className="text-sm">nba_api</code>.
+          via <code className="text-label">nba_api</code>.
         </p>
       </header>
 
       {error && (
-        <p role="alert" className="mb-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
+        <p role="alert" className="mb-6 rounded-lg bg-red-50 px-3 py-2 text-label text-red-700 dark:bg-red-950/50 dark:text-red-300">
           {error}
         </p>
       )}
 
       <div className="grid gap-10 lg:grid-cols-[3fr_2fr]">
-        <section aria-labelledby="new-title">
-          <h2 id="new-title" className="mb-4 text-sm font-semibold tracking-wide text-zinc-500 uppercase">
-            New export
-          </h2>
-          <div className="rounded-xl border border-zinc-200 bg-white p-5 sm:p-6 dark:border-zinc-800 dark:bg-zinc-900">
+        <Section id="new" title="New export" className="py-0">
+          <Card>
             {options ? (
               <ExportForm options={options} onCreated={(job) => setJobs((all) => [job, ...all])} />
             ) : (
-              <p className="text-sm text-zinc-500">Loading…</p>
+              <p className="text-label text-subtle">Loading…</p>
             )}
-          </div>
-        </section>
+          </Card>
+        </Section>
 
-        <section aria-labelledby="exports-title">
-          <h2 id="exports-title" className="mb-4 text-sm font-semibold tracking-wide text-zinc-500 uppercase">
-            Exports
-          </h2>
+        <Section id="exports" title="Exports" className="py-0">
           <ExportList jobs={jobs} teams={options?.teams ?? []} onChanged={refresh} />
-        </section>
+        </Section>
       </div>
-    </div>
+    </Container>
   )
 }

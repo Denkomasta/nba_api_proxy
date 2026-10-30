@@ -1,14 +1,17 @@
+import { Button } from 'denval-ui'
 import type { ReactNode } from 'react'
 
+// Form controls denval-ui doesn't have yet, built on its colour tokens
+
 export const inputClass =
-  'w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-xs focus:border-accent focus:ring-2 focus:ring-accent/30 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900'
+  'w-full rounded-lg border border-border bg-surface px-3 py-2 text-label text-foreground shadow-xs focus:border-accent focus:ring-2 focus:ring-accent/30 focus:outline-none'
 
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
+      <span className="mb-1.5 block text-label font-medium text-secondary">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-xs text-zinc-500">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-caption text-subtle">{hint}</span>}
     </label>
   )
 }
@@ -32,22 +35,18 @@ export function Segmented<T extends string>({
 }) {
   return (
     <fieldset>
-      <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</legend>
-      <div className="flex rounded-lg border border-zinc-300 bg-white p-0.5 dark:border-zinc-700 dark:bg-zinc-900">
+      <legend className="mb-1.5 text-label font-medium text-secondary">{label}</legend>
+      <div className="flex rounded-control border border-border bg-surface p-0.5">
         {choices.map((choice) => (
-          <button
+          <Button
             key={choice.value}
-            type="button"
+            variant={choice.value === value ? 'solid' : 'ghost'}
             aria-pressed={choice.value === value}
             onClick={() => onChange(choice.value)}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
-              choice.value === value
-                ? 'bg-accent font-medium text-white dark:text-zinc-950'
-                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
-            }`}
+            className="flex-1 px-3 py-1.5"
           >
             {choice.label}
-          </button>
+          </Button>
         ))}
       </div>
     </fieldset>
