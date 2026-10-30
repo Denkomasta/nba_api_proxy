@@ -1,4 +1,4 @@
-import { Button } from 'denval-ui'
+import { Alert, AlertVariant, Button } from 'denval-ui'
 import { type SubmitEvent, useState } from 'react'
 import { api, type Dataset, type Filters, type Format, type Job, type Options } from '../api'
 import { Field, inputClass, Segmented } from './controls'
@@ -155,11 +155,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
         </Button>
       </div>
 
-      {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-label text-red-700 dark:bg-red-950/50 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <Alert role="alert" variant={AlertVariant.Error} text={error} />}
     </form>
   )
 }

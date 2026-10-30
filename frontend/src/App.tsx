@@ -1,4 +1,4 @@
-import { Card, Container, Heading, Section } from 'denval-ui'
+import { Alert, AlertVariant, Card, Container, Heading, Section } from 'denval-ui'
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Job, type Options } from './api'
 import { ExportForm } from './components/ExportForm'
@@ -40,11 +40,7 @@ export default function App() {
         </p>
       </header>
 
-      {error && (
-        <p role="alert" className="mb-6 rounded-lg bg-red-50 px-3 py-2 text-label text-red-700 dark:bg-red-950/50 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <Alert role="alert" variant={AlertVariant.Error} text={error} className="mb-6" />}
 
       <div className="grid gap-10 lg:grid-cols-[3fr_2fr]">
         <Section id="new" title="New export" className="py-0">
