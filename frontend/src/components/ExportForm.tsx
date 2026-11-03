@@ -11,7 +11,7 @@ const datasets: Record<Dataset, { label: string; description: string }> = {
   playbyplay: {
     label: 'Play-by-play',
     description:
-      'Every event of every matching game: the event log, with game_id or possession_id as the case. One request per game ' +
+      'An event log of every matching game, with one case per possession (case_id, activity, timestamp). One request per game ' +
       '(about 1–3 s each), cached games are instant.',
   },
 }
@@ -98,7 +98,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
           label="Season"
           hint={
             noTimestamps
-              ? `Before ${options.first_live_season} events have no wall-clock time (timeActual). Order by game_seconds.`
+              ? `Before ${options.first_live_season} events have no wall-clock time, so timestamps are built from the game clock.`
               : undefined
           }
         >

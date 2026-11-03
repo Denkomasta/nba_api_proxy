@@ -1,12 +1,16 @@
-"""Splits a game's play-by-play into possessions, so a possession can be the case of an event log.
+"""Turns a game's play-by-play into an event log with one case per possession.
 
-A possession ends with a made basket, a last free throw, a turnover, a defensive rebound or the end
-of a period. It is worked out from the events because only the live feed has a `possession` field,
-and that field counts a few possessions too many (dead balls can split one).
+`assign_possessions` splits the events: a possession ends with a made basket, a last free throw, a
+turnover, a defensive rebound or the end of a period. It is worked out from the events because only
+the live feed has a `possession` field, and that field holds a team, not a possession number.
+
+`event_log` then shapes each possession as a trace that starts with how the team got the ball and
+ends with how it was finished. Activities are named from the side of the team with the ball.
 """
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -19,6 +23,14 @@ FOULS = {"foul", "Foul"}
 # After these fouls the fouled team shoots and then keeps the ball
 BALL_KEPT = ("flagrant", "clear-path", "clear path", "away-from-play", "away from play")
 
+# Lower-cased action types left out of the event log
+DROPPED = {"substitution", "game", "ejection", "instantreplay", "instant replay", "stoppage", "memo", ""}
+
+OPPONENT_REBOUND = "Opponent Defensive Rebound"
+# A possession that stops on one of these is finished, so it needs no Period End
+FINISHED = {"Made 2PT", "Made 3PT", "Made Free Throw", "Turnover", OPPONENT_REBOUND}
+SCORES = {"Made 2PT", "Made 3PT", "Made Free Throw"}
+
 _FREE_THROW_NUMBER = re.compile(r"(\d) of (\d)")
 
 
@@ -28,6 +40,27 @@ class _Possession:
     events: list[int] = field(default_factory=list)
     # Something happened that only the team with the ball does, not just subs or a jump ball
     acted: bool = False
+
+
+@dataclass
+class LogEntry:
+    possession: int
+    team: str | None
+    activity: str
+    # Position in the game's events. A derived entry points at the event it was derived from.
+    index: int
+    # Not an event of its own in the feed: an inbound, or the second copy of a defensive rebound
+    derived: bool = False
+
+
+def _team_lookup(events: list[dict[str, Any]]) -> Callable[[dict[str, Any]], str | None]:
+    # The stats feed leaves the team out of team rebounds and team turnovers, but not the location
+    by_location = {e["location"]: e["teamTricode"] for e in events if e.get("location") and e.get("teamTricode")}
+
+    def team_of(event: dict[str, Any]) -> str | None:
+        return event.get("teamTricode") or by_location.get(event.get("location"))
+
+    return team_of
 
 
 def _clock_key(event: dict[str, Any]) -> tuple[Any, Any]:
@@ -65,12 +98,7 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
     Substitutions, timeouts and other dead-ball events go with the possession that follows them,
     or with the one before them at the end of a period.
     """
-    # The stats feed leaves the team out of team rebounds and team turnovers, but not the location
-    by_location = {e["location"]: e["teamTricode"] for e in events if e.get("location") and e.get("teamTricode")}
-
-    def team_of(event: dict[str, Any]) -> str | None:
-        return event.get("teamTricode") or by_location.get(event.get("location"))
-
+    team_of = _team_lookup(events)
     teams = list(dict.fromkeys(filter(None, map(team_of, events))))
 
     def opponent(team: str) -> str | None:
@@ -162,3 +190,81 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
         for index in possession.events:
             labels[index] = (number, possession.team)
     return labels
+
+
+def _activity(event: dict[str, Any], team: str | None, ball: str | None) -> str:
+    action = str(event.get("actionType"))
+    description = str(event.get("description"))
+    result = "Missed" if description.startswith("MISS") else "Made"
+    if action in SHOTS:
+        return f"{result} {'3PT' if action in ('3pt', 'heave') or '3PT' in description else '2PT'}"
+    if action in FREE_THROWS:
+        return f"{result} Free Throw"
+    if action in REBOUNDS:
+        return "Offensive Rebound" if team == ball else OPPONENT_REBOUND
+    if action in TURNOVERS:
+        return "Turnover"
+    if action in FOULS:
+        if "technical" in f"{event.get('subType')} {event.get('descriptor')}".lower():
+            return "Technical Foul"
+        return "Offensive Foul" if team == ball else "Defensive Foul"
+    return "Jump Ball" if action == "jumpball" else action.title()
+
+
+def _inbound(previous: list[LogEntry], number: int, team: str | None) -> LogEntry:
+    """The start of a possession the feed logs nothing for, derived from how the last one ended."""
+    last = next((entry for entry in reversed(previous) if entry.activity != "Timeout"), previous[-1])
+    activity = "Inbound"
+    if last.team != team and last.activity in SCORES:
+        activity = "Inbound after Score"
+    elif last.team != team and last.activity == "Turnover":
+        activity = "Inbound after Turnover"
+    return LogEntry(number, team, activity, last.index, derived=True)
+
+
+def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
+    """One game as an event log, possession by possession.
+
+    Every trace starts with Defensive Rebound, Steal, Jump Ball, Period Start or an inbound. A
+    defensive rebound is also copied to the end of the possession it finished. Substitutions and
+    other stoppages are dropped, apart from timeouts and the period markers a trace needs.
+    """
+    team_of = _team_lookup(events)
+    grouped: dict[int, list[int]] = {}
+    teams: dict[int, str | None] = {}
+    for index, (number, team) in enumerate(assign_possessions(events)):
+        grouped.setdefault(number, []).append(index)
+        teams[number] = team
+
+    traces: list[list[LogEntry]] = []
+    for number, indexes in grouped.items():
+        ball = teams[number]
+        trace: list[LogEntry] = []
+        period_start = period_end = None
+        for index in indexes:
+            event = events[index]
+            action = str(event.get("actionType")).lower()
+            if action == "period":
+                if "start" in f"{event.get('subType')} {event.get('description')}".lower():
+                    period_start = index
+                else:
+                    period_end = index
+            elif action not in DROPPED:
+                trace.append(LogEntry(number, ball, _activity(event, team_of(event), ball), index))
+
+        first = next((entry for entry in trace if entry.activity != "Timeout"), None)
+        previous = traces[-1] if traces else None
+        if period_start is not None:
+            if not first or first.activity != "Jump Ball":
+                trace.insert(0, LogEntry(number, ball, "Period Start", period_start))
+        elif first and first.activity == "Offensive Rebound" and previous and previous[0].team != ball:
+            first.activity = "Defensive Rebound"
+            previous.append(LogEntry(previous[0].possession, previous[0].team, OPPONENT_REBOUND, first.index, derived=True))
+        elif previous and not (first and first.activity in ("Steal", "Jump Ball")):
+            trace.insert(0, _inbound(previous, number, ball))
+
+        if period_end is not None and (not trace or trace[-1].activity not in FINISHED):
+            trace.append(LogEntry(number, ball, "Period End", period_end))
+        if trace:
+            traces.append(trace)
+    return [entry for trace in traces for entry in trace]
