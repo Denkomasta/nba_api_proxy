@@ -31,11 +31,13 @@ DROPPED = {"substitution", "game", "ejection", "instantreplay", "instant replay"
 OPPONENT_REBOUND = "Opponent Defensive Rebound"
 OPPONENT_JUMP_BALL = "Opponent Jump Ball"
 GOALTENDING = "Goaltending"
+ASSIST = "Assist"
 # A possession that stops on one of these is finished, so it needs no Period End
 FINISHED = {"Made 2PT", "Made 3PT", "Made Free Throw", "Turnover", OPPONENT_REBOUND, OPPONENT_JUMP_BALL, GOALTENDING}
 SCORES = {"Made 2PT", "Made 3PT", "Made Free Throw"}
 
 _FREE_THROW_NUMBER = re.compile(r"(\d) of (\d)")
+_ASSIST_IN_DESCRIPTION = re.compile(r"\(([^()]*?) \d+ AST\)")
 
 
 @dataclass
@@ -53,8 +55,10 @@ class LogEntry:
     activity: str
     # Position in the game's events. A derived entry points at the event it was derived from.
     index: int
-    # Not an event of its own in the feed: an inbound, or the second copy of a rebound or jump ball
+    # Not an event of its own in the feed: an inbound, an assist, or the second copy of a rebound or jump ball
     derived: bool = False
+    # Who gave the assist
+    player: str | None = None
 
 
 def _team_lookup(events: list[dict[str, Any]]) -> Callable[[dict[str, Any]], str | None]:
@@ -142,6 +146,29 @@ def _jump_ball_winner(events: list[dict[str, Any]], team_of: Callable[[dict[str,
         return next(iter(teams)) if len(teams) == 1 else None
 
     return winner
+
+
+def _assister(events: list[dict[str, Any]], team_of: Callable[[dict[str, Any]], str | None]) -> Callable[[dict[str, Any]], str | None]:
+    """Finds who assisted a made shot, or None.
+
+    The live feed names them on the shot. The stats feed only has "(<last name> 1 AST)" in the
+    description, so the full name comes from the team's other events where it can be matched.
+    """
+    names: dict[tuple[Any, str | None], set[str]] = {}
+    for event in events:
+        if event.get("playerName") and event.get("playerNameI"):
+            names.setdefault((event["playerName"], team_of(event)), set()).add(event["playerNameI"])
+
+    def assister(event: dict[str, Any]) -> str | None:
+        if event.get("assistPlayerNameInitial"):
+            return event["assistPlayerNameInitial"]
+        match = _ASSIST_IN_DESCRIPTION.search(str(event.get("description")))
+        if not match:
+            return None
+        found = names.get((match[1], team_of(event)), set())
+        return next(iter(found)) if len(found) == 1 else match[1]
+
+    return assister
 
 
 def _next_play(events: list[dict[str, Any]], index: int) -> dict[str, Any] | None:
@@ -324,12 +351,14 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
     """One game as an event log, possession by possession.
 
     Every trace starts with Defensive Rebound, Steal, Jump Ball, Period Start or an inbound. A
-    defensive rebound or jump ball is also copied to the end of the possession it finished. A team that keeps the
-    ball stays in its trace, with an inbound in the middle. Substitutions and other stoppages are
-    dropped, apart from timeouts and the period markers a trace needs.
+    defensive rebound or jump ball is also copied to the end of the possession it finished. An assisted
+    shot has an Assist right before it. A team that keeps the ball stays in its trace, with an inbound in
+    the middle. Substitutions and other stoppages are dropped, apart from timeouts and the period markers
+    a trace needs.
     """
     team_of = _team_lookup(events)
     jump_ball_winner = _jump_ball_winner(events, team_of)
+    assister = _assister(events, team_of)
     technical = _technical_free_throws(events)
     grouped: dict[int, list[int]] = {}
     teams: dict[int, str | None] = {}
@@ -351,7 +380,10 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
                 else:
                     period_end = index
             elif action not in DROPPED:
-                trace.append(LogEntry(number, ball, _activity(event, team_of(event), ball), index))
+                activity = _activity(event, team_of(event), ball)
+                if activity in ("Made 2PT", "Made 3PT") and (player := assister(event)):
+                    trace.append(LogEntry(number, ball, ASSIST, index, derived=True, player=player))
+                trace.append(LogEntry(number, ball, activity, index))
 
         trace = _with_kept_ball_inbounds(trace, events, technical)
         first = next((entry for entry in trace if entry.activity != "Timeout"), None)

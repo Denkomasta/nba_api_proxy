@@ -20,7 +20,7 @@ from typing import Any
 
 from . import nba
 from .models import ExportRequest, Filters, Job
-from .possessions import event_log, period_starts_first
+from .possessions import ASSIST, event_log, period_starts_first
 
 log = logging.getLogger(__name__)
 
@@ -197,12 +197,15 @@ def log_rows(game_id: str, game: dict[str, Any], source: str, events: list[dict[
         event = events[entry.index]
         # An inbound only borrows the time and the score: the player and the details aren't its own
         inbound = entry.activity.startswith("Inbound")
-        time = timestamps[entry.index] + timedelta(milliseconds=inbound)
-        row = ({} if inbound else event) | {
+        assist = entry.activity == ASSIST
+        time = timestamps[entry.index] + timedelta(milliseconds=1 if inbound else -1 if assist else 0)
+        # An assist only shares the shot's description, the shot's details aren't its own
+        details = {} if inbound else {"description": event.get("description")} if assist else event
+        row = details | {
             "case_id": f"{game_id}-{entry.possession:03d}",
             "activity": entry.activity,
             "timestamp": time.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-            "resource": entry.team if inbound else event.get("playerNameI") or event.get("teamTricode") or entry.team,
+            "resource": entry.player if assist else entry.team if inbound else event.get("playerNameI") or event.get("teamTricode") or entry.team,
             "is_derived": entry.derived,
             "possession_team": entry.team,
             "team": entry.team if inbound else event.get("teamTricode"),

@@ -110,7 +110,8 @@ def game_seconds(period: int, clock: str) -> float | None:
 def event_timestamps(events: list[dict[str, Any]], game_date: str) -> list[datetime]:
     """A UTC time per event, strictly increasing so that sorting by time keeps the feed's order.
 
-    Events are at least 2 ms apart, which leaves room for an inbound 1 ms after the event before it.
+    Events are at least 3 ms apart, which leaves room for an inbound 1 ms after the event before it
+    and an assist 1 ms before its shot.
 
     The live feed's `timeActual` can go backwards and repeats within a play. The stats feed has none,
     so its timestamps are midnight on the game date plus the elapsed game time, not the real time.
@@ -121,7 +122,7 @@ def event_timestamps(events: list[dict[str, Any]], game_date: str) -> list[datet
     for event in events:
         actual = event.get("timeActual")
         time = datetime.fromisoformat(actual) if actual else midnight + timedelta(seconds=game_seconds(event.get("period"), event.get("clock")) or 0)
-        last = time if last is None else max(time, last + timedelta(milliseconds=2))
+        last = time if last is None else max(time, last + timedelta(milliseconds=3))
         timestamps.append(last)
     return timestamps
 
