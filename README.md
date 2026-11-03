@@ -65,8 +65,8 @@ A trace starts with how the team got the ball and ends with how the possession f
 
 | | Activities |
 |---|---|
-| **Start** | `Defensive Rebound`, `Inbound after Score`, `Inbound after Turnover`, `Inbound`, `Steal`, `Jump Ball`, `Period Start` |
-| **During** | `Made 2PT`, `Missed 2PT`, `Made 3PT`, `Missed 3PT`, `Made Free Throw`, `Missed Free Throw`, `Offensive Rebound`, `Block`, `Defensive Foul`, `Offensive Foul`, `Technical Foul`, `Violation`, `Jump Ball`, `Timeout` |
+| **Start** | `Defensive Rebound`, `Inbound after Score`, `Inbound after Turnover`, `Steal`, `Jump Ball`, `Period Start` |
+| **During** | `Made 2PT`, `Missed 2PT`, `Made 3PT`, `Missed 3PT`, `Made Free Throw`, `Missed Free Throw`, `Offensive Rebound`, `Block`, `Defensive Foul`, `Offensive Foul`, `Technical Foul`, `Violation`, `Jump Ball`, `Timeout`, `Inbound` |
 | **End** | `Made 2PT`, `Made 3PT`, `Made Free Throw`, `Turnover`, `Opponent Defensive Rebound`, `Period End` |
 
 Rows with `is_derived` set to `True` are added to give every trace these boundaries:
@@ -74,7 +74,8 @@ Rows with `is_derived` set to `True` are added to give every trace these boundar
 - **`Opponent Defensive Rebound`** is a copy of the real rebound that starts the next possession. It has
   the same `event_index`, so filter on `is_derived` when counting rebounds.
 - **`Inbound…`** is inferred, because the feed doesn't log inbound passes. It takes its time from the end
-  of the previous possession and has no player. `Inbound` without a reason means the same team kept the ball.
+  of the previous possession and has no player. `Inbound` without a reason appears mid-trace, where the same team keeps the ball, for example after a
+  transition take free throw. A team that keeps the ball always stays in the same possession.
 
 Substitutions, ejections and game end markers are left out. `Period Start` and `Period End` are only kept
 where they open or close a trace. A few traces don't follow these boundaries because of the feed's order

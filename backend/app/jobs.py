@@ -14,7 +14,7 @@ import time
 import uuid
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -196,10 +196,11 @@ def log_rows(game_id: str, game: dict[str, Any], source: str, events: list[dict[
         event = events[entry.index]
         # An inbound only borrows the time and the score: the player and the details aren't its own
         inbound = entry.activity.startswith("Inbound")
+        time = timestamps[entry.index] + timedelta(milliseconds=inbound)
         row = ({} if inbound else event) | {
             "case_id": f"{game_id}-{entry.possession:03d}",
             "activity": entry.activity,
-            "timestamp": timestamps[entry.index],
+            "timestamp": time.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "resource": entry.team if inbound else event.get("playerNameI") or event.get("teamTricode") or entry.team,
             "is_derived": entry.derived,
             "possession_team": entry.team,

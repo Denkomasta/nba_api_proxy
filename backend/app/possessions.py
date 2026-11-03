@@ -21,7 +21,7 @@ REBOUNDS = {"rebound", "Rebound"}
 FOULS = {"foul", "Foul"}
 
 # After these fouls the fouled team shoots and then keeps the ball
-BALL_KEPT = ("flagrant", "clear-path", "clear path", "away-from-play", "away from play")
+BALL_KEPT = ("flagrant", "clear-path", "clear path", "away-from-play", "away from play", "transition take")
 
 # Lower-cased action types left out of the event log
 DROPPED = {"substitution", "game", "ejection", "instantreplay", "instant replay", "stoppage", "memo", ""}
@@ -111,11 +111,11 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
         for i, e in enumerate(events)
         if e.get("actionType") in FREE_THROWS and i not in technical
     }
-    fouls: dict[tuple[Any, Any], list[str]] = {}
+    fouls: dict[tuple[Any, Any], list[tuple[str | None, str]]] = {}
     for event in events:
         if event.get("actionType") in FOULS:
             foul = f"{event.get('subType')} {event.get('descriptor')}".lower()
-            fouls.setdefault(_clock_key(event), []).append(foul)
+            fouls.setdefault(_clock_key(event), []).append((team_of(event), foul))
 
     finished: list[_Possession] = []
     current = _Possession(None)
@@ -172,7 +172,9 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
             number = _FREE_THROW_NUMBER.search(str(event.get("subType")))
             if number and number[1] == number[2]:
                 sub_type = str(event.get("subType")).lower()
-                ball_kept = any(kind in text for kind in BALL_KEPT for text in [sub_type, *fouls.get(_clock_key(event), [])])
+                # Only a foul by the other team can give the shooters the ball back
+                against = [foul for fouler, foul in fouls.get(_clock_key(event), []) if fouler != team]
+                ball_kept = any(kind in text for kind in BALL_KEPT for text in [sub_type, *against])
                 if missed:
                     rebound_open = not ball_kept
                 elif not ball_kept:
@@ -219,17 +221,35 @@ def _inbound(previous: list[LogEntry], number: int, team: str | None) -> LogEntr
         activity = "Inbound after Score"
     elif last.team != team and last.activity == "Turnover":
         activity = "Inbound after Turnover"
-    return LogEntry(number, team, activity, last.index, derived=True)
+    return LogEntry(number, team, activity, previous[-1].index, derived=True)
+
+
+def _with_kept_ball_inbounds(trace: list[LogEntry], events: list[dict[str, Any]], technical: set[int]) -> list[LogEntry]:
+    """Adds an inbound where the team shot its last free throw, kept the ball and play went on."""
+    result: list[LogEntry] = []
+    kept = False
+    for entry in trace:
+        if kept and entry.activity != "Timeout":
+            if entry.activity != "Offensive Rebound" and entry.activity != OPPONENT_REBOUND and not entry.activity.endswith("Free Throw"):
+                result.append(LogEntry(entry.possession, entry.team, "Inbound", result[-1].index, derived=True))
+            kept = False
+        result.append(entry)
+        if entry.activity.endswith("Free Throw"):
+            number = _FREE_THROW_NUMBER.search(str(events[entry.index].get("subType")))
+            kept = bool(number and number[1] == number[2]) and entry.index not in technical
+    return result
 
 
 def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
     """One game as an event log, possession by possession.
 
     Every trace starts with Defensive Rebound, Steal, Jump Ball, Period Start or an inbound. A
-    defensive rebound is also copied to the end of the possession it finished. Substitutions and
-    other stoppages are dropped, apart from timeouts and the period markers a trace needs.
+    defensive rebound is also copied to the end of the possession it finished. A team that keeps the
+    ball stays in its trace, with an inbound in the middle. Substitutions and other stoppages are
+    dropped, apart from timeouts and the period markers a trace needs.
     """
     team_of = _team_lookup(events)
+    technical = _technical_free_throws(events)
     grouped: dict[int, list[int]] = {}
     teams: dict[int, str | None] = {}
     for index, (number, team) in enumerate(assign_possessions(events)):
@@ -252,6 +272,7 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
             elif action not in DROPPED:
                 trace.append(LogEntry(number, ball, _activity(event, team_of(event), ball), index))
 
+        trace = _with_kept_ball_inbounds(trace, events, technical)
         first = next((entry for entry in trace if entry.activity != "Timeout"), None)
         previous = traces[-1] if traces else None
         if period_start is not None:
@@ -265,6 +286,12 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
 
         if period_end is not None and (not trace or trace[-1].activity not in FINISHED):
             trace.append(LogEntry(number, ball, "Period End", period_end))
-        if trace:
+        if previous and period_start is None and previous[0].team == ball:
+            previous.extend(trace)
+        elif trace:
             traces.append(trace)
+
+    for number, trace in enumerate(traces, start=1):
+        for entry in trace:
+            entry.possession = number
     return [entry for trace in traces for entry in trace]
