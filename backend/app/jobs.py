@@ -38,29 +38,17 @@ PBP_COLUMNS = [
     "possession_team",
     "team",
     "game_id",
-    "game_date",
     "home_team",
     "away_team",
-    "event_index",
     "game_seconds",
-    "source",
     "period",
-    "clock",
     "scoreHome",
     "scoreAway",
-    "description",
     "subType",
     "descriptor",
     "qualifiers",
-    "shotResult",
     "shotDistance",
-    "x",
-    "y",
     "area",
-    "areaDetail",
-    "assistPlayerNameInitial",
-    "stealPlayerName",
-    "blockPlayerName",
     "foulDrawnPlayerName",
 ]
 
@@ -160,14 +148,14 @@ class JobManager:
                         raise Cancelled
                     job.message = f"Game {job.done + 1} of {job.total}" + (f", {from_cache} from cache" if from_cache else "")
                     try:
-                        source, events, cached = nba.play_by_play(game_id, cacheable=game["finished"])
+                        _, events, cached = nba.play_by_play(game_id, cacheable=game["finished"])
                     except Exception as exc:
                         log.warning("Skipping game %s: %s", game_id, exc)
                         skipped.append(game_id)
                         nba.pause()
                     else:
                         from_cache += cached
-                        rows = log_rows(game_id, game, source, events)
+                        rows = log_rows(game_id, game, events)
                         for row in rows:
                             out.write(json.dumps(row) + "\n")
                         job.rows = (job.rows or 0) + len(rows)
@@ -188,19 +176,18 @@ class JobManager:
         job.filename = filename(job)
 
 
-def log_rows(game_id: str, game: dict[str, Any], source: str, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def log_rows(game_id: str, game: dict[str, Any], events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The event log rows of one game, trace by trace."""
     events = period_starts_first(events)
     timestamps = nba.event_timestamps(events, game["game_date"])
     rows = []
     for entry in event_log(events):
         event = events[entry.index]
-        # An inbound only borrows the time and the score: the player and the details aren't its own
+        # An inbound or an assist only borrows the time and the score: the shot's details aren't its own
         inbound = entry.activity.startswith("Inbound")
         assist = entry.activity == ASSIST
         time = timestamps[entry.index] + timedelta(milliseconds=1 if inbound else -1 if assist else 0)
-        # An assist only shares the shot's description, the shot's details aren't its own
-        details = {} if inbound else {"description": event.get("description")} if assist else event
+        details = {} if inbound or assist else event
         row = details | {
             "case_id": f"{game_id}-{entry.possession:03d}",
             "activity": entry.activity,
@@ -210,14 +197,10 @@ def log_rows(game_id: str, game: dict[str, Any], source: str, events: list[dict[
             "possession_team": entry.team,
             "team": entry.team if inbound else event.get("teamTricode"),
             "game_id": game_id,
-            "game_date": game["game_date"],
             "home_team": game.get("home_team"),
             "away_team": game.get("away_team"),
-            "event_index": entry.index,
             "game_seconds": nba.game_seconds(event.get("period"), event.get("clock")),
-            "source": source,
             "period": event.get("period"),
-            "clock": event.get("clock"),
             "scoreHome": event.get("scoreHome"),
             "scoreAway": event.get("scoreAway"),
         }

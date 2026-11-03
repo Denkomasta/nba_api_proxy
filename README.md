@@ -51,15 +51,16 @@ The other columns describe the event:
 | `resource` | The player, or the team when no player is involved |
 | `is_derived` | `True` if the row isn't an event of its own in the NBA feed (see below) |
 | `possession_team`, `team` | Team with the ball, and team that did this event |
-| `game_id`, `game_date`, `home_team`, `away_team` | Game context |
-| `event_index` | Position of the source event within the game's feed |
+| `game_id`, `home_team`, `away_team` | Game context |
 | `game_seconds` | Elapsed game time: 12-minute quarters, 5-minute overtimes |
-| `source` | `live` or `stats`, i.e. which feed the game came from |
-
-They are followed by a selection of the feed's columns: `period`, `clock`, `scoreHome`, `scoreAway`,
-`description`, `subType`, `descriptor`, `qualifiers`, `shotResult`, `shotDistance`, `x`, `y`, `area`,
-`areaDetail`, `assistPlayerNameInitial`, `stealPlayerName`, `blockPlayerName` and
-`foulDrawnPlayerName`. In CSV, list values such as `qualifiers` are joined with `|`.
+| `period` | The quarter or overtime |
+| `scoreHome`, `scoreAway` | The score. Stats feed: only on rows where it changes or a period starts or ends |
+| `subType` | The kind of shot, foul or turnover, e.g. `Driving Layup Shot` |
+| `descriptor` | More detail on the shot or foul, e.g. `driving`, `shooting`. Live feed only |
+| `qualifiers` | Play context, e.g. `fastbreak`, `2ndchance`. Live feed only. In CSV, values are joined with `\|` |
+| `shotDistance` | Distance of the shot in feet. Stats feed: `0` on every other event, and on some shots where the distance is missing |
+| `area` | Court zone, e.g. `Restricted Area`. Live feed only |
+| `foulDrawnPlayerName` | The player who was fouled. Live feed only |
 
 A trace starts with how the team got the ball and ends with how the possession finished. `Goaltending`
 is a defender illegally touching a shot, so the basket counts. It stays with that basket, right after it:
@@ -73,7 +74,7 @@ is a defender illegally touching a shot, so the basket counts. It stays with tha
 Rows with `is_derived` set to `True` are added to give every trace these boundaries:
 
 - **`Opponent Defensive Rebound`** and **`Opponent Jump Ball`** are copies of the real rebound or jump ball
-  that starts the next possession. They have the same `event_index`, so filter on `is_derived` when counting.
+  that starts the next possession, so filter on `is_derived` when counting.
 - **`Assist`** comes 1 ms before the made shot it belongs to, because the feed only records the assist on the
   shot's row. Its `resource` is the player who gave it, and its score already includes the basket.
 - **`Inbound…`** is inferred, because the feed doesn't log inbound passes. It takes its time from the end
