@@ -61,18 +61,19 @@ They are followed by a selection of the feed's columns: `period`, `clock`, `scor
 `areaDetail`, `assistPlayerNameInitial`, `stealPlayerName`, `blockPlayerName` and
 `foulDrawnPlayerName`. In CSV, list values such as `qualifiers` are joined with `|`.
 
-A trace starts with how the team got the ball and ends with how the possession finished:
+A trace starts with how the team got the ball and ends with how the possession finished. `Goaltending`
+is a defender illegally touching a shot, so the basket counts. It stays with that basket, right after it:
 
 | | Activities |
 |---|---|
 | **Start** | `Defensive Rebound`, `Inbound after Score`, `Inbound after Turnover`, `Steal`, `Jump Ball`, `Period Start` |
-| **During** | `Made 2PT`, `Missed 2PT`, `Made 3PT`, `Missed 3PT`, `Made Free Throw`, `Missed Free Throw`, `Offensive Rebound`, `Block`, `Defensive Foul`, `Offensive Foul`, `Technical Foul`, `Violation`, `Jump Ball`, `Timeout`, `Inbound` |
-| **End** | `Made 2PT`, `Made 3PT`, `Made Free Throw`, `Turnover`, `Opponent Defensive Rebound`, `Period End` |
+| **During** | `Made 2PT`, `Missed 2PT`, `Made 3PT`, `Missed 3PT`, `Made Free Throw`, `Missed Free Throw`, `Offensive Rebound`, `Block`, `Defensive Foul`, `Offensive Foul`, `Technical Foul`, `Violation`, `Goaltending`, `Jump Ball`, `Timeout`, `Inbound` |
+| **End** | `Made 2PT`, `Made 3PT`, `Made Free Throw`, `Goaltending`, `Turnover`, `Opponent Defensive Rebound`, `Opponent Jump Ball`, `Period End` |
 
 Rows with `is_derived` set to `True` are added to give every trace these boundaries:
 
-- **`Opponent Defensive Rebound`** is a copy of the real rebound that starts the next possession. It has
-  the same `event_index`, so filter on `is_derived` when counting rebounds.
+- **`Opponent Defensive Rebound`** and **`Opponent Jump Ball`** are copies of the real rebound or jump ball
+  that starts the next possession. They have the same `event_index`, so filter on `is_derived` when counting.
 - **`Inbound…`** is inferred, because the feed doesn't log inbound passes. It takes its time from the end
   of the previous possession and has no player. `Inbound` without a reason appears mid-trace, where the same team keeps the ball, for example after a
   transition take free throw. A team that keeps the ball always stays in the same possession.
