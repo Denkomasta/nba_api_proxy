@@ -81,8 +81,9 @@ Rows with `is_derived` set to `True` are added to give every trace these boundar
 Substitutions, ejections and game end markers are left out. `Period Start` and `Period End` are only kept
 where they open or close a trace. A few traces don't follow these boundaries because of the feed's order
 of events at the same clock. Possessions are worked out in `backend/app/possessions.py`, the same way for
-both feeds. The stats feed may log some events differently, such as steals, so keep one export within
-one era.
+both feeds. Keep one export within one era, because timestamps before 2019-20 are built from the game
+clock, so their durations leave out stoppages. On those older jump balls, `team` and `resource` show the
+first jumper, not the winner.
 
 ### How exports run
 

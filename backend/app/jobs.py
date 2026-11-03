@@ -20,7 +20,7 @@ from typing import Any
 
 from . import nba
 from .models import ExportRequest, Filters, Job
-from .possessions import event_log
+from .possessions import event_log, period_starts_first
 
 log = logging.getLogger(__name__)
 
@@ -190,6 +190,7 @@ class JobManager:
 
 def log_rows(game_id: str, game: dict[str, Any], source: str, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The event log rows of one game, trace by trace."""
+    events = period_starts_first(events)
     timestamps = nba.event_timestamps(events, game["game_date"])
     rows = []
     for entry in event_log(events):

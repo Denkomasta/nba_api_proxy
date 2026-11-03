@@ -96,10 +96,58 @@ def _technical_free_throws(events: list[dict[str, Any]]) -> set[int]:
     return found
 
 
+def _action_type(event: dict[str, Any]) -> str:
+    """The event's action type. The stats feed leaves it empty on steals and blocks."""
+    action = str(event.get("actionType") or "")
+    if action:
+        return action
+    description = str(event.get("description"))
+    return "steal" if "STEAL" in description else "block" if "BLOCK" in description else ""
+
+
+def _is_period_start(event: dict[str, Any]) -> bool:
+    return str(event.get("actionType")).lower() == "period" and "start" in f"{event.get('subType')} {event.get('description')}".lower()
+
+
+def period_starts_first(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The events with each Period Start in front of anything the feed logs before it in that period."""
+    ordered: list[dict[str, Any]] = []
+    period = None
+    first = 0
+    for event in events:
+        if event.get("period") != period:
+            period = event.get("period")
+            first = len(ordered)
+        ordered.insert(first if _is_period_start(event) else len(ordered), event)
+    return ordered
+
+
+def _jump_ball_winner(events: list[dict[str, Any]], team_of: Callable[[dict[str, Any]], str | None]) -> Callable[[dict[str, Any]], str | None]:
+    """Finds the team that won a jump ball, or None if it can't be told.
+
+    The live feed puts that team on the event. The stats feed puts the first jumper's team there, so
+    the winner comes from "Tip to <last name>", matched with the names on the game's other events.
+    """
+    players: dict[str, set[str]] = {}
+    for event in events:
+        team = team_of(event)
+        if event.get("playerName") and team and event.get("actionType") not in JUMP_BALLS:
+            players.setdefault(event["playerName"], set()).add(team)
+
+    def winner(event: dict[str, Any]) -> str | None:
+        if event.get("jumpBallRecoveredName"):
+            return team_of(event)
+        _, tip, name = str(event.get("description")).partition("Tip to ")
+        teams = players.get(name.strip(), set()) if tip else set()
+        return next(iter(teams)) if len(teams) == 1 else None
+
+    return winner
+
+
 def _next_play(events: list[dict[str, Any]], index: int) -> dict[str, Any] | None:
     """The next event after `index` that isn't a stoppage."""
-    ignored = DROPPED | {"timeout"}
-    return next((e for e in events[index + 1 :] if str(e.get("actionType")).lower() not in ignored), None)
+    ignored = DROPPED | {"timeout", "steal", "block"}
+    return next((e for e in events[index + 1 :] if _action_type(e).lower() not in ignored), None)
 
 
 def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | None]]:
@@ -109,6 +157,7 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
     or with the one before them at the end of a period.
     """
     team_of = _team_lookup(events)
+    jump_ball_winner = _jump_ball_winner(events, team_of)
     teams = list(dict.fromkeys(filter(None, map(team_of, events))))
 
     def opponent(team: str) -> str | None:
@@ -178,11 +227,11 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
         elif team and team != current.team and action in REBOUNDS and rebound_open:
             close(team)
             current.acted = True
-        elif team and current.team and team != current.team and action in JUMP_BALLS and not lost_on_turnover(index):
+        elif action in JUMP_BALLS and current.team and (winner := jump_ball_winner(event)) and winner != current.team and not lost_on_turnover(index):
             if current.events:
-                close(team)
+                close(winner)
             else:
-                current.team = team
+                current.team = winner
             current.acted = True
         current.events.append(index)
 
@@ -224,7 +273,7 @@ def assign_possessions(events: list[dict[str, Any]]) -> list[tuple[int, str | No
 
 
 def _activity(event: dict[str, Any], team: str | None, ball: str | None) -> str:
-    action = str(event.get("actionType"))
+    action = _action_type(event)
     description = str(event.get("description"))
     result = "Missed" if description.startswith("MISS") else "Made"
     if action in SHOTS:
@@ -280,6 +329,7 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
     dropped, apart from timeouts and the period markers a trace needs.
     """
     team_of = _team_lookup(events)
+    jump_ball_winner = _jump_ball_winner(events, team_of)
     technical = _technical_free_throws(events)
     grouped: dict[int, list[int]] = {}
     teams: dict[int, str | None] = {}
@@ -294,9 +344,9 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
         period_start = period_end = None
         for index in indexes:
             event = events[index]
-            action = str(event.get("actionType")).lower()
+            action = _action_type(event).lower()
             if action == "period":
-                if "start" in f"{event.get('subType')} {event.get('description')}".lower():
+                if _is_period_start(event):
                     period_start = index
                 else:
                     period_end = index
@@ -306,7 +356,7 @@ def event_log(events: list[dict[str, Any]]) -> list[LogEntry]:
         trace = _with_kept_ball_inbounds(trace, events, technical)
         first = next((entry for entry in trace if entry.activity != "Timeout"), None)
         previous = traces[-1] if traces else None
-        won_jump_ball = bool(first) and first.activity == "Jump Ball" and team_of(events[first.index]) == ball
+        won_jump_ball = bool(first) and first.activity == "Jump Ball" and jump_ball_winner(events[first.index]) == ball
         if period_start is not None:
             if not first or first.activity != "Jump Ball":
                 trace.insert(0, LogEntry(number, ball, "Period Start", period_start))
