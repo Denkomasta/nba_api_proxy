@@ -18,3 +18,6 @@ backend/data
 
 # Local env files
 .env
+
+# Exported data
+nba_playbyplay_*.csv

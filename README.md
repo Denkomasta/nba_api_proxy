@@ -36,35 +36,57 @@ season or a start date.
 
 ### Play-by-play as an event log
 
-These columns come first, followed by every raw column the NBA feed returns:
+Each row belongs to one possession, which is the case. Import these three columns as the event log:
 
 | Column | Meaning |
 |--------|---------|
-| `game_id` | Case ID for one case per game |
-| `possession_id` | Case ID for one case per possession, e.g. `0022500001-042` |
-| `possession_team` | Team with the ball in that possession |
-| `game_date`, `home_team`, `away_team` | Game context |
-| `event_index` | Position of the event within the game (0, 1, 2, …). Use it as the order. |
+| `case_id` | The possession, e.g. `0022500001-042` |
+| `activity` | What happened, named from the side of the team with the ball, e.g. `Made 2PT` |
+| `timestamp` | UTC, strictly increasing within a game. Live feed: `timeActual`, nudged forward where it repeats or goes backwards. Stats feed (before 2019-20): midnight on the game date plus `game_seconds`, so not the real time of day. |
+
+The other columns describe the event:
+
+| Column | Meaning |
+|--------|---------|
+| `resource` | The player, or the team when no player is involved |
+| `is_derived` | `True` if the row isn't an event of its own in the NBA feed (see below) |
+| `possession_team`, `team` | Team with the ball, and team that did this event |
+| `game_id`, `home_team`, `away_team` | Game context |
 | `game_seconds` | Elapsed game time: 12-minute quarters, 5-minute overtimes |
-| `source` | `live` or `stats`, i.e. which feed the game came from |
+| `period` | The quarter or overtime |
+| `scoreHome`, `scoreAway` | The score. Stats feed: only on rows where it changes or a period starts or ends |
+| `subType` | The kind of shot, foul or turnover, e.g. `Driving Layup Shot` |
+| `descriptor` | More detail on the shot or foul, e.g. `driving`, `shooting`. Live feed only |
+| `qualifiers` | Play context, e.g. `fastbreak`, `2ndchance`. Live feed only. In CSV, values are joined with `\|` |
+| `shotDistance` | Distance of the shot in feet. Stats feed: `0` on every other event, and on some shots where the distance is missing |
+| `area` | Court zone, e.g. `Restricted Area`. Live feed only |
+| `foulDrawnPlayerName` | The player who was fouled. Live feed only |
 
-Useful raw columns:
+A trace starts with how the team got the ball and ends with how the possession finished. `Goaltending`
+is a defender illegally touching a shot, so the basket counts. It stays with that basket, right after it:
 
-- `actionType` / `subType` / `descriptor`: candidates for the activity
-- `timeActual`: wall-clock timestamp (UTC), **live feed only, so 2019-20 onward**. For older games use `game_seconds`.
-- `teamTricode`, `playerNameI`, `personId`: resources
-- `period`, `clock`, `scoreHome`, `scoreAway`, `shotResult`, `description`
+| | Activities |
+|---|---|
+| **Start** | `Defensive Rebound`, `Inbound after Score`, `Inbound after Turnover`, `Steal`, `Jump Ball`, `Period Start` |
+| **During** | `Assist`, `Made 2PT`, `Missed 2PT`, `Made 3PT`, `Missed 3PT`, `Made Free Throw`, `Missed Free Throw`, `Offensive Rebound`, `Block`, `Defensive Foul`, `Offensive Foul`, `Technical Foul`, `Violation`, `Goaltending`, `Jump Ball`, `Timeout`, `Inbound` |
+| **End** | `Made 2PT`, `Made 3PT`, `Made Free Throw`, `Goaltending`, `Turnover`, `Opponent Defensive Rebound`, `Opponent Jump Ball`, `Period End` |
 
-The two feeds name some values differently. For example, live has `actionType` `2pt` or `3pt` plus a
-`shotResult`, while stats has `Made Shot` or `Missed Shot`. Keep one export within one era, or map the
-values when you analyze the data. In CSV, list values such as `qualifiers` and `personIdsFilter` are
-joined with `|`.
+Rows with `is_derived` set to `True` are added to give every trace these boundaries:
 
-A possession ends with a made basket, a last free throw, a turnover, a defensive rebound or the end of
-a period, so an offensive rebound continues it. Possessions are worked out from the events in
-`backend/app/possessions.py`, the same way for both feeds, and the raw `possession` column of the live
-feed is kept next to them. Substitutions, timeouts and other dead-ball events go with the possession
-that follows them, so filter them out if they would clutter the process model.
+- **`Opponent Defensive Rebound`** and **`Opponent Jump Ball`** are copies of the real rebound or jump ball
+  that starts the next possession, so filter on `is_derived` when counting.
+- **`Assist`** comes 1 ms before the made shot it belongs to, because the feed only records the assist on the
+  shot's row. Its `resource` is the player who gave it, and its score already includes the basket.
+- **`Inbound…`** is inferred, because the feed doesn't log inbound passes. It takes its time from the end
+  of the previous possession and has no player. `Inbound` without a reason appears mid-trace, where the same team keeps the ball, for example after a
+  transition take free throw. A team that keeps the ball always stays in the same possession.
+
+Substitutions, ejections and game end markers are left out. `Period Start` and `Period End` are only kept
+where they open or close a trace. A few traces don't follow these boundaries because of the feed's order
+of events at the same clock. Possessions are worked out in `backend/app/possessions.py`, the same way for
+both feeds. Keep one export within one era, because timestamps before 2019-20 are built from the game
+clock, so their durations leave out stoppages. On those older jump balls, `team` and `resource` show the
+first jumper, not the winner.
 
 ### How exports run
 

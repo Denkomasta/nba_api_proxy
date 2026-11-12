@@ -14,13 +14,13 @@ import time
 import uuid
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from . import nba
 from .models import ExportRequest, Filters, Job
-from .possessions import assign_possessions
+from .possessions import ASSIST, event_log, period_starts_first
 
 log = logging.getLogger(__name__)
 
@@ -28,17 +28,28 @@ EXPORTS_DIR = nba.DATA_DIR / "exports"
 EXPORT_TTL = float(os.getenv("EXPORT_TTL_HOURS", "24")) * 3600
 MAX_GAMES = int(os.getenv("MAX_GAMES", "1500"))
 
-# Columns added in front of the raw play-by-play columns
+# Play-by-play columns: the event log's own first, then the feed's columns worth filtering on
 PBP_COLUMNS = [
-    "game_id",
-    "possession_id",
+    "case_id",
+    "activity",
+    "timestamp",
+    "resource",
+    "is_derived",
     "possession_team",
-    "game_date",
+    "team",
+    "game_id",
     "home_team",
     "away_team",
-    "event_index",
     "game_seconds",
-    "source",
+    "period",
+    "scoreHome",
+    "scoreAway",
+    "subType",
+    "descriptor",
+    "qualifiers",
+    "shotDistance",
+    "area",
+    "foulDrawnPlayerName",
 ]
 
 
@@ -125,9 +136,8 @@ class JobManager:
             raise ValueError(f"{len(games)} games match, the limit is {MAX_GAMES}. Narrow the filters.")
         job.total = len(games)
 
-        # Pass 1: download each game into a JSON-lines file and collect every column that appears.
-        # Pass 2: write the final file with one fixed header. Memory stays at one game at a time.
-        columns = dict.fromkeys(PBP_COLUMNS)
+        # Pass 1: download each game into a JSON-lines file.
+        # Pass 2: write the final file. Memory stays at one game at a time.
         staging = self.path(job).with_suffix(".jsonl")
         skipped: list[str] = []
         from_cache = 0
@@ -138,31 +148,17 @@ class JobManager:
                         raise Cancelled
                     job.message = f"Game {job.done + 1} of {job.total}" + (f", {from_cache} from cache" if from_cache else "")
                     try:
-                        source, events, cached = nba.play_by_play(game_id, cacheable=game["finished"])
+                        _, events, cached = nba.play_by_play(game_id, cacheable=game["finished"])
                     except Exception as exc:
                         log.warning("Skipping game %s: %s", game_id, exc)
                         skipped.append(game_id)
                         nba.pause()
                     else:
                         from_cache += cached
-                        context = {
-                            "game_id": game_id,
-                            "game_date": game["game_date"],
-                            "home_team": game.get("home_team"),
-                            "away_team": game.get("away_team"),
-                        }
-                        possessions = assign_possessions(events)
-                        for index, (event, (possession, team)) in enumerate(zip(events, possessions)):
-                            row = context | {
-                                "possession_id": f"{game_id}-{possession:03d}",
-                                "possession_team": team,
-                                "event_index": index,
-                                "game_seconds": nba.game_seconds(event.get("period"), event.get("clock")),
-                                "source": source,
-                            } | event
-                            columns.update(dict.fromkeys(row))
+                        rows = log_rows(game_id, game, events)
+                        for row in rows:
                             out.write(json.dumps(row) + "\n")
-                        job.rows = (job.rows or 0) + len(events)
+                        job.rows = (job.rows or 0) + len(rows)
                         if not cached:
                             nba.pause()
                     job.done += 1
@@ -170,14 +166,46 @@ class JobManager:
             if skipped and len(skipped) == len(games):
                 raise RuntimeError(f"Every game failed to download, e.g. {skipped[0]}. See the backend logs.")
             job.message = "Writing file"
-            write(read_jsonl(staging), list(columns), job.request.format, self.path(job))
+            write(read_jsonl(staging), PBP_COLUMNS, job.request.format, self.path(job))
         finally:
             staging.unlink(missing_ok=True)
 
-        job.message = f"{job.rows or 0} events from {len(games) - len(skipped)} games"
+        job.message = f"{job.rows or 0} rows from {len(games) - len(skipped)} games"
         if skipped:
             job.message += f"; {len(skipped)} skipped: {', '.join(skipped[:10])}" + ("…" if len(skipped) > 10 else "")
         job.filename = filename(job)
+
+
+def log_rows(game_id: str, game: dict[str, Any], events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The event log rows of one game, trace by trace."""
+    events = period_starts_first(events)
+    timestamps = nba.event_timestamps(events, game["game_date"])
+    rows = []
+    for entry in event_log(events):
+        event = events[entry.index]
+        # An inbound or an assist only borrows the time and the score: the shot's details aren't its own
+        inbound = entry.activity.startswith("Inbound")
+        assist = entry.activity == ASSIST
+        time = timestamps[entry.index] + timedelta(milliseconds=1 if inbound else -1 if assist else 0)
+        details = {} if inbound or assist else event
+        row = details | {
+            "case_id": f"{game_id}-{entry.possession:03d}",
+            "activity": entry.activity,
+            "timestamp": time.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "resource": entry.player if assist else entry.team if inbound else event.get("playerNameI") or event.get("teamTricode") or entry.team,
+            "is_derived": entry.derived,
+            "possession_team": entry.team,
+            "team": entry.team if inbound else event.get("teamTricode"),
+            "game_id": game_id,
+            "home_team": game.get("home_team"),
+            "away_team": game.get("away_team"),
+            "game_seconds": nba.game_seconds(event.get("period"), event.get("clock")),
+            "period": event.get("period"),
+            "scoreHome": event.get("scoreHome"),
+            "scoreAway": event.get("scoreAway"),
+        }
+        rows.append({column: row.get(column) for column in PBP_COLUMNS})
+    return rows
 
 
 def read_jsonl(path: Path) -> Iterator[dict[str, Any]]:
