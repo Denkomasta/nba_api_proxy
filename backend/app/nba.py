@@ -6,6 +6,7 @@ import os
 import re
 import time
 from datetime import date, datetime, timedelta
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -28,14 +29,20 @@ RETRIES = 3
 FIRST_LIVE_SEASON = 2019
 FIRST_SEASON = 1996
 
-SEASON_TYPES = ["Regular Season", "Playoffs", "PlayIn", "Pre Season", "All Star"]
+# The third digit of a game ID, e.g. 0042400101 is a playoff game
+GAME_TYPES = {"1": "Pre Season", "2": "Regular Season", "3": "All Star", "4": "Playoffs", "5": "PlayIn", "6": "NBA Cup Final"}
+
+
+def season_name(start_year: int) -> str:
+    """2024 -> "2024-25"."""
+    return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
 def seasons() -> list[str]:
     """All seasons from 1996-97 up to the current one, newest first."""
     today = date.today()
     current = today.year if today.month >= 10 else today.year - 1
-    return [f"{y}-{(y + 1) % 100:02d}" for y in range(current, FIRST_SEASON - 1, -1)]
+    return [season_name(y) for y in range(current, FIRST_SEASON - 1, -1)]
 
 
 def teams() -> list[dict[str, Any]]:
@@ -57,14 +64,31 @@ def _with_retries(call):
 
 
 def find_games(filters: Filters) -> list[dict[str, Any]]:
-    """LeagueGameFinder rows: one row per team per game, newest first."""
+    """LeagueGameFinder rows: one row per team per game, newest first.
+
+    The endpoint takes one season and one season type at a time, so each pair is one request.
+    Each row gets a readable SEASON ("2024-25") and SEASON_TYPE in front of the feed's SEASON_ID ("22024").
+    """
+    rows: list[dict[str, Any]] = []
+    for i, (season, season_type) in enumerate(product(filters.seasons or [None], filters.season_types or [None])):
+        if i:
+            pause()
+        rows += _find_games(filters, season, season_type)
+    rows.sort(key=lambda row: (row["GAME_DATE"], row["GAME_ID"]), reverse=True)
+    return [
+        {"SEASON": season_name(season_start(row["GAME_ID"])), "SEASON_TYPE": game_type(row["GAME_ID"])} | row
+        for row in rows
+    ]
+
+
+def _find_games(filters: Filters, season: str | None, season_type: str | None) -> list[dict[str, Any]]:
     mmddyyyy = "%m/%d/%Y"
     finder = _with_retries(
         lambda: leaguegamefinder.LeagueGameFinder(
             player_or_team_abbreviation="T",
             league_id_nullable="00",
-            season_nullable=filters.season or "",
-            season_type_nullable=filters.season_type or "",
+            season_nullable=season or "",
+            season_type_nullable=season_type or "",
             team_id_nullable=filters.team_id or "",
             vs_team_id_nullable=filters.opponent_team_id or "",
             date_from_nullable=filters.date_from.strftime(mmddyyyy) if filters.date_from else "",
@@ -127,14 +151,19 @@ def event_timestamps(events: list[dict[str, Any]], game_date: str) -> list[datet
     return timestamps
 
 
-def _season_start(game_id: str) -> int:
+def season_start(game_id: str) -> int:
     # Game IDs look like 0022400061: league "00", type "2", season start year "24"
     yy = int(game_id[3:5])
     return 1900 + yy if yy >= 46 else 2000 + yy
 
 
+def game_type(game_id: str) -> str | None:
+    """"Regular Season", "Playoffs", … from the game ID."""
+    return GAME_TYPES.get(game_id[2])
+
+
 def _download_play_by_play(game_id: str) -> tuple[str, list[dict[str, Any]]]:
-    if _season_start(game_id) >= FIRST_LIVE_SEASON:
+    if season_start(game_id) >= FIRST_LIVE_SEASON:
         try:
             data = _with_retries(lambda: live_playbyplay.PlayByPlay(game_id=game_id, timeout=TIMEOUT).get_dict())
             return "live", data["game"]["actions"]
