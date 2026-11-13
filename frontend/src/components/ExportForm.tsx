@@ -1,7 +1,7 @@
 import { Alert, AlertVariant, Button } from 'denval-ui'
 import { useController, useForm, useWatch } from 'react-hook-form'
 import { api, type Dataset, type Format, type Job, type Options } from '../api'
-import { Field, inputClass, SegmentedField } from './controls'
+import { Field, inputClass, MultiToggle, SegmentedField } from './controls'
 import { SeasonPicker } from './SeasonPicker'
 
 const datasets: Record<Dataset, { label: string; description: string }> = {
@@ -17,12 +17,18 @@ const datasets: Record<Dataset, { label: string; description: string }> = {
   },
 }
 
+const seasonTypeLabels: Record<string, string> = {
+  PlayIn: 'Play-In',
+  'Pre Season': 'Preseason',
+  'All Star': 'All-Star',
+}
+
 // What the inputs hold: an empty string means "no filter"
 interface FormValues {
   dataset: Dataset
   format: Format
   seasons: string[]
-  seasonType: string
+  seasonTypes: string[]
   teamId: string
   opponentId: string
   dateFrom: string
@@ -44,7 +50,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
       format: 'csv',
       // Default to the last complete season
       seasons: options.seasons[1] ? [options.seasons[1]] : [],
-      seasonType: 'Regular Season',
+      seasonTypes: ['Regular Season'],
       teamId: '',
       opponentId: '',
       dateFrom: '',
@@ -56,6 +62,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
   const dataset = useWatch({ control, name: 'dataset' })
   const { field: seasonsField } = useController({ control, name: 'seasons' })
   const seasons = seasonsField.value
+  const { field: seasonTypesField } = useController({ control, name: 'seasonTypes' })
 
   // Before the live feed, timestamps come from the game clock, so they leave out stoppages
   const older = seasons.filter((s) => s < options.first_live_season).length
@@ -70,7 +77,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
   async function submit(values: FormValues) {
     const filters = {
       seasons: values.seasons.length ? values.seasons : undefined,
-      season_type: values.seasonType || undefined,
+      season_types: values.seasonTypes.length ? values.seasonTypes : undefined,
       team_id: values.teamId ? Number(values.teamId) : undefined,
       opponent_team_id: values.opponentId ? Number(values.opponentId) : undefined,
       date_from: values.dateFrom || undefined,
@@ -106,24 +113,27 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
 
       <SeasonPicker seasons={options.seasons} value={seasons} onChange={seasonsField.onChange} hint={seasonHint} />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Season type">
-          <select className={inputClass} {...register('seasonType')}>
-            <option value="">All</option>
-            {options.season_types.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        </Field>
+      <MultiToggle
+        label={
+          <>
+            Season types{' '}
+            <span className="font-normal text-subtle">
+              ({seasonTypesField.value.length ? `${seasonTypesField.value.length} selected` : 'all'})
+            </span>
+          </>
+        }
+        value={seasonTypesField.value}
+        choices={options.season_types.map((t) => ({ value: t, label: seasonTypeLabels[t] ?? t }))}
+        onChange={seasonTypesField.onChange}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="From date">
           <input type="date" className={inputClass} {...register('dateFrom')} />
         </Field>
         <Field label="To date">
           <input type="date" className={inputClass} {...register('dateTo')} />
         </Field>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Team">
           <select className={inputClass} {...register('teamId')}>
             <option value="">All teams</option>

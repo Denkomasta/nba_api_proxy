@@ -20,7 +20,7 @@ export interface Options {
 
 export interface Filters {
   seasons?: string[]
-  season_type?: string
+  season_types?: string[]
   team_id?: number
   opponent_team_id?: number
   date_from?: string

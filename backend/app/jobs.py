@@ -40,6 +40,7 @@ PBP_COLUMNS = [
     "team",
     "game_id",
     "season",
+    "season_type",
     "home_team",
     "away_team",
     "game_seconds",
@@ -204,6 +205,7 @@ def log_rows(game_id: str, game: dict[str, Any], events: list[dict[str, Any]]) -
             "team": entry.team if inbound else event.get("teamTricode"),
             "game_id": game_id,
             "season": nba.season_name(nba.season_start(game_id)),
+            "season_type": nba.game_type(game_id),
             "home_team": game.get("home_team"),
             "away_team": game.get("away_team"),
             "game_seconds": nba.game_seconds(event.get("period"), event.get("clock")),
@@ -239,7 +241,7 @@ def write(rows: Iterable[dict[str, Any]], columns: list[str], fmt: str, path: Pa
 
 
 def filename(job: Job) -> str:
-    """e.g. nba_playbyplay_2004-05+2024-25_regular-season_GSW_vs-LAC_20261025-1430.csv"""
+    """e.g. nba_playbyplay_2004-05+2024-25_regular-season+playoffs_GSW_vs-LAC_20261025-1430.csv"""
     f: Filters = job.request.filters
     abbreviations = {t["id"]: t["abbreviation"] for t in nba.teams()}
     parts = [
@@ -248,7 +250,7 @@ def filename(job: Job) -> str:
         "+".join(f.seasons),
         f.date_from and f"from-{f.date_from}",
         f.date_to and f"to-{f.date_to}",
-        f.season_type and f.season_type.lower().replace(" ", "-"),
+        "+".join(t.lower().replace(" ", "-") for t in f.season_types),
         f.team_id and abbreviations.get(f.team_id, str(f.team_id)),
         f.opponent_team_id and "vs-" + abbreviations.get(f.opponent_team_id, str(f.opponent_team_id)),
         f.location and f.location.lower(),

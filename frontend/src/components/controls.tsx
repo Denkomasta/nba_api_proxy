@@ -54,6 +54,41 @@ export function Segmented<T extends string>({
   )
 }
 
+/** Like `Segmented`, but any number of choices can be on. */
+export function MultiToggle<T extends string>({
+  label,
+  value,
+  choices,
+  onChange,
+}: {
+  label: ReactNode
+  value: T[]
+  choices: Choice<T>[]
+  onChange: (value: T[]) => void
+}) {
+  // Keep the choices' order, so the value doesn't depend on the click order
+  const toggle = (choice: T) =>
+    onChange(choices.map((c) => c.value).filter((v) => (v === choice ? !value.includes(v) : value.includes(v))))
+  return (
+    <fieldset>
+      <legend className="mb-1.5 text-label font-medium text-secondary">{label}</legend>
+      <div className="flex flex-wrap rounded-control border border-border bg-surface p-0.5">
+        {choices.map((choice) => (
+          <Button
+            key={choice.value}
+            variant={value.includes(choice.value) ? 'solid' : 'ghost'}
+            aria-pressed={value.includes(choice.value)}
+            onClick={() => toggle(choice.value)}
+            className="flex-1 px-3 py-1.5 whitespace-nowrap"
+          >
+            {choice.label}
+          </Button>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 /** `Segmented` connected to a field of a react-hook-form form. */
 export function SegmentedField<T extends FieldValues, N extends FieldPath<T>>({
   control,

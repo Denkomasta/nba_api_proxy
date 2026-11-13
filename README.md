@@ -28,12 +28,14 @@ from cloud hosting IPs (AWS, Azure, Hetzner, …). Home and university connectio
 
 | Dataset | Source | One row per | Speed |
 |---------|--------|-------------|-------|
-| **Games** | `LeagueGameFinder` | team per game (each game appears twice when no team is selected), with box score totals and a readable `SEASON` | one request per season, a few seconds |
+| **Games** | `LeagueGameFinder` | team per game (each game appears twice when no team is selected), with box score totals, a readable `SEASON` and `SEASON_TYPE` | one request per season and season type, a few seconds |
 | **Play-by-play** | NBA live feed (`cdn.nba.com`) from 2019-20, `PlayByPlayV3` (stats.nba.com) before that | event | one request per game, about 1–3 s each |
 
-Filters: seasons, season type, date range, team, opponent, home/away, win/loss. You need at least one
+Filters: seasons, season types, date range, team, opponent, home/away, win/loss. You need at least one
 season or a start date. You can pick any number of seasons, e.g. 2004-05, 2014-15 and 2024-25 to compare
-decades. They go into one file, and each row says which season it's from.
+decades, and any number of season types, e.g. Regular Season and Playoffs. They go into one file, and each
+row says which season and season type it's from. With no season type selected you get every game,
+including preseason, All-Star games and the NBA Cup final.
 
 ### Play-by-play as an event log
 
@@ -52,7 +54,7 @@ The other columns describe the event:
 | `resource` | The player, or the team when no player is involved |
 | `is_derived` | `True` if the row isn't an event of its own in the NBA feed (see below) |
 | `possession_team`, `team` | Team with the ball, and team that did this event |
-| `game_id`, `season`, `home_team`, `away_team` | Game context. `season` is e.g. `2024-25` |
+| `game_id`, `season`, `season_type`, `home_team`, `away_team` | Game context. `season` is e.g. `2024-25`, `season_type` e.g. `Playoffs` |
 | `game_seconds` | Elapsed game time: 12-minute quarters, 5-minute overtimes |
 | `period` | The quarter or overtime |
 | `scoreHome`, `scoreAway` | The score. Stats feed: only on rows where it changes or a period starts or ends |
@@ -131,7 +133,7 @@ In development the cache and exports go to `backend/data/`, which is git-ignored
 |--------|------|-|
 | `GET` | `/api/options` | Seasons, season types, teams |
 | `GET` | `/api/exports` | All exports from the last 24 h |
-| `POST` | `/api/exports` | Start an export: `{"dataset": "playbyplay", "format": "csv", "filters": {"seasons": ["2004-05", "2024-25"], "team_id": 1610612744}}` |
+| `POST` | `/api/exports` | Start an export: `{"dataset": "playbyplay", "format": "csv", "filters": {"seasons": ["2004-05", "2024-25"], "season_types": ["Regular Season", "Playoffs"], "team_id": 1610612744}}` |
 | `GET` | `/api/exports/{id}` | Status and progress |
 | `POST` | `/api/exports/{id}/cancel` | Cancel |
 | `GET` | `/api/exports/{id}/download` | The file |

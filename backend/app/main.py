@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 
 from . import nba
 from .jobs import MAX_GAMES, JobManager
-from .models import ExportRequest, Job
+from .models import SEASON_TYPES, ExportRequest, Job
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -23,7 +23,7 @@ def options() -> dict:
     """Values for the filter form."""
     return {
         "seasons": nba.seasons(),
-        "season_types": nba.SEASON_TYPES,
+        "season_types": SEASON_TYPES,
         "teams": nba.teams(),
         "first_live_season": nba.season_name(nba.FIRST_LIVE_SEASON),
         "max_games": MAX_GAMES,
