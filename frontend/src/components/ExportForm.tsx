@@ -1,7 +1,8 @@
 import { Alert, AlertVariant, Button } from 'denval-ui'
-import { useForm, useWatch } from 'react-hook-form'
+import { useController, useForm, useWatch } from 'react-hook-form'
 import { api, type Dataset, type Format, type Job, type Options } from '../api'
 import { Field, inputClass, SegmentedField } from './controls'
+import { SeasonPicker } from './SeasonPicker'
 
 const datasets: Record<Dataset, { label: string; description: string }> = {
   games: {
@@ -20,7 +21,7 @@ const datasets: Record<Dataset, { label: string; description: string }> = {
 interface FormValues {
   dataset: Dataset
   format: Format
-  season: string
+  seasons: string[]
   seasonType: string
   teamId: string
   opponentId: string
@@ -42,7 +43,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
       dataset: 'playbyplay',
       format: 'csv',
       // Default to the last complete season
-      season: options.seasons[1] ?? '',
+      seasons: options.seasons[1] ? [options.seasons[1]] : [],
       seasonType: 'Regular Season',
       teamId: '',
       opponentId: '',
@@ -52,13 +53,23 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
       outcome: '',
     },
   })
-  const [dataset, season] = useWatch({ control, name: ['dataset', 'season'] })
+  const dataset = useWatch({ control, name: 'dataset' })
+  const { field: seasonsField } = useController({ control, name: 'seasons' })
+  const seasons = seasonsField.value
 
-  const noTimestamps = dataset === 'playbyplay' && season !== '' && season < options.first_live_season
+  // Before the live feed, timestamps come from the game clock, so they leave out stoppages
+  const older = seasons.filter((s) => s < options.first_live_season).length
+  const seasonHint =
+    dataset !== 'playbyplay' || older === 0
+      ? undefined
+      : older === seasons.length
+        ? `Before ${options.first_live_season} events have no wall-clock time, so timestamps are built from the game clock.`
+        : `Seasons before ${options.first_live_season} have timestamps built from the game clock, later ones the real time. ` +
+          'To compare durations across eras, use game_seconds. Group by the season column.'
 
   async function submit(values: FormValues) {
     const filters = {
-      season: values.season || undefined,
+      seasons: values.seasons.length ? values.seasons : undefined,
       season_type: values.seasonType || undefined,
       team_id: values.teamId ? Number(values.teamId) : undefined,
       opponent_team_id: values.opponentId ? Number(values.opponentId) : undefined,
@@ -93,22 +104,9 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
         <p className="mt-2 text-label text-muted">{datasets[dataset].description}</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="Season"
-          hint={
-            noTimestamps
-              ? `Before ${options.first_live_season} events have no wall-clock time, so timestamps are built from the game clock.`
-              : undefined
-          }
-        >
-          <select className={inputClass} {...register('season')}>
-            <option value="">Any (use the dates)</option>
-            {options.seasons.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </Field>
+      <SeasonPicker seasons={options.seasons} value={seasons} onChange={seasonsField.onChange} hint={seasonHint} />
+
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Season type">
           <select className={inputClass} {...register('seasonType')}>
             <option value="">All</option>
@@ -123,6 +121,9 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
         <Field label="To date">
           <input type="date" className={inputClass} {...register('dateTo')} />
         </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Team">
           <select className={inputClass} {...register('teamId')}>
             <option value="">All teams</option>

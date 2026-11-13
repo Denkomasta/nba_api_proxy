@@ -25,7 +25,7 @@ def options() -> dict:
         "seasons": nba.seasons(),
         "season_types": nba.SEASON_TYPES,
         "teams": nba.teams(),
-        "first_live_season": f"{nba.FIRST_LIVE_SEASON}-{(nba.FIRST_LIVE_SEASON + 1) % 100:02d}",
+        "first_live_season": nba.season_name(nba.FIRST_LIVE_SEASON),
         "max_games": MAX_GAMES,
     }
 

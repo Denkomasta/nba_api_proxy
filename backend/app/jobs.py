@@ -12,6 +12,7 @@ import shutil
 import threading
 import time
 import uuid
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -38,6 +39,7 @@ PBP_COLUMNS = [
     "possession_team",
     "team",
     "game_id",
+    "season",
     "home_team",
     "away_team",
     "game_seconds",
@@ -132,8 +134,12 @@ class JobManager:
 
     def _export_play_by_play(self, job: Job) -> None:
         games = nba.game_context(nba.find_games(job.request.filters))
-        if len(games) > MAX_GAMES:
-            raise ValueError(f"{len(games)} games match, the limit is {MAX_GAMES}. Narrow the filters.")
+        per_season = Counter(nba.season_start(game_id) for game_id in games)
+        for start, count in sorted(per_season.items()):
+            if count > MAX_GAMES:
+                raise ValueError(
+                    f"{count} games match in {nba.season_name(start)}, the limit is {MAX_GAMES} per season. Narrow the filters."
+                )
         job.total = len(games)
 
         # Pass 1: download each game into a JSON-lines file.
@@ -197,6 +203,7 @@ def log_rows(game_id: str, game: dict[str, Any], events: list[dict[str, Any]]) -
             "possession_team": entry.team,
             "team": entry.team if inbound else event.get("teamTricode"),
             "game_id": game_id,
+            "season": nba.season_name(nba.season_start(game_id)),
             "home_team": game.get("home_team"),
             "away_team": game.get("away_team"),
             "game_seconds": nba.game_seconds(event.get("period"), event.get("clock")),
@@ -232,13 +239,13 @@ def write(rows: Iterable[dict[str, Any]], columns: list[str], fmt: str, path: Pa
 
 
 def filename(job: Job) -> str:
-    """e.g. nba_playbyplay_2024-25_regular-season_GSW_vs-LAC_20261025-1430.csv"""
+    """e.g. nba_playbyplay_2004-05+2024-25_regular-season_GSW_vs-LAC_20261025-1430.csv"""
     f: Filters = job.request.filters
     abbreviations = {t["id"]: t["abbreviation"] for t in nba.teams()}
     parts = [
         "nba",
         job.request.dataset,
-        f.season,
+        "+".join(f.seasons),
         f.date_from and f"from-{f.date_from}",
         f.date_to and f"to-{f.date_to}",
         f.season_type and f.season_type.lower().replace(" ", "-"),

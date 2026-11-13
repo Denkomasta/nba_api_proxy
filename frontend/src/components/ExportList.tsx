@@ -17,7 +17,7 @@ function describe(job: Job, teams: Map<number, Team>): string {
   const dates = f.date_from || f.date_to ? `${f.date_from ?? '…'} → ${f.date_to ?? '…'}` : null
   return [
     job.request.dataset === 'games' ? 'Games' : 'Play-by-play',
-    [f.season, f.season_type].filter(Boolean).join(' ') || null,
+    [f.seasons?.join(', '), f.season_type].filter(Boolean).join(' ') || null,
     dates,
     [team(f.team_id), f.opponent_team_id ? `vs ${team(f.opponent_team_id)}` : null].filter(Boolean).join(' ') || null,
     f.location === 'Road' ? 'Away' : f.location,

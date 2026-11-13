@@ -28,11 +28,12 @@ from cloud hosting IPs (AWS, Azure, Hetzner, …). Home and university connectio
 
 | Dataset | Source | One row per | Speed |
 |---------|--------|-------------|-------|
-| **Games** | `LeagueGameFinder` | team per game (each game appears twice when no team is selected), with box score totals | one request, a few seconds |
+| **Games** | `LeagueGameFinder` | team per game (each game appears twice when no team is selected), with box score totals and a readable `SEASON` | one request per season, a few seconds |
 | **Play-by-play** | NBA live feed (`cdn.nba.com`) from 2019-20, `PlayByPlayV3` (stats.nba.com) before that | event | one request per game, about 1–3 s each |
 
-Filters: season, season type, date range, team, opponent, home/away, win/loss. You need at least a
-season or a start date.
+Filters: seasons, season type, date range, team, opponent, home/away, win/loss. You need at least one
+season or a start date. You can pick any number of seasons, e.g. 2004-05, 2014-15 and 2024-25 to compare
+decades. They go into one file, and each row says which season it's from.
 
 ### Play-by-play as an event log
 
@@ -51,7 +52,7 @@ The other columns describe the event:
 | `resource` | The player, or the team when no player is involved |
 | `is_derived` | `True` if the row isn't an event of its own in the NBA feed (see below) |
 | `possession_team`, `team` | Team with the ball, and team that did this event |
-| `game_id`, `home_team`, `away_team` | Game context |
+| `game_id`, `season`, `home_team`, `away_team` | Game context. `season` is e.g. `2024-25` |
 | `game_seconds` | Elapsed game time: 12-minute quarters, 5-minute overtimes |
 | `period` | The quarter or overtime |
 | `scoreHome`, `scoreAway` | The score. Stats feed: only on rows where it changes or a period starts or ends |
@@ -84,8 +85,9 @@ Rows with `is_derived` set to `True` are added to give every trace these boundar
 Substitutions, ejections and game end markers are left out. `Period Start` and `Period End` are only kept
 where they open or close a trace. A few traces don't follow these boundaries because of the feed's order
 of events at the same clock. Possessions are worked out in `backend/app/possessions.py`, the same way for
-both feeds. Keep one export within one era, because timestamps before 2019-20 are built from the game
-clock, so their durations leave out stoppages. On those older jump balls, `team` and `resource` show the
+both feeds. Timestamps before 2019-20 are built from the game clock, so their durations leave out
+stoppages. If one export mixes seasons from before and after 2019-20, compare durations with
+`game_seconds`, not `timestamp`. On those older jump balls, `team` and `resource` show the
 first jumper, not the winner.
 
 ### How exports run
@@ -93,7 +95,9 @@ first jumper, not the winner.
 - An export runs in the background. The page shows its progress, and the Download button appears when
   it's done. You can close the page while it runs.
 - Exports run **one at a time**. Others wait in the queue, so the NBA API doesn't throttle you.
-  A full regular season (1,230 games) takes roughly 30–60 minutes the first time.
+  A full regular season (1,230 games) takes roughly 30–60 minutes the first time, so six seasons take
+  a few hours. Seasons you already exported come from the cache.
+- A play-by-play export refuses more than `MAX_GAMES` games (1,500 by default) in any one season.
 - Finished games are **cached on disk**, so exporting the same games again takes seconds.
 - A game that fails to download is skipped and listed in the export's message.
 - Finished files stay downloadable for 24 hours. A backend restart forgets the list of exports, but
@@ -127,7 +131,7 @@ In development the cache and exports go to `backend/data/`, which is git-ignored
 |--------|------|-|
 | `GET` | `/api/options` | Seasons, season types, teams |
 | `GET` | `/api/exports` | All exports from the last 24 h |
-| `POST` | `/api/exports` | Start an export: `{"dataset": "playbyplay", "format": "csv", "filters": {"season": "2024-25", "team_id": 1610612744}}` |
+| `POST` | `/api/exports` | Start an export: `{"dataset": "playbyplay", "format": "csv", "filters": {"seasons": ["2004-05", "2024-25"], "team_id": 1610612744}}` |
 | `GET` | `/api/exports/{id}` | Status and progress |
 | `POST` | `/api/exports/{id}/cancel` | Cancel |
 | `GET` | `/api/exports/{id}/download` | The file |
