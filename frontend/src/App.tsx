@@ -1,4 +1,4 @@
-import { Alert, AlertVariant, Card, Container, Heading, Section } from 'denval-ui'
+import { Alert, Card, Container, Heading, HeadingVariant, Section, StatusTone } from 'denval-ui'
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Job, type Options } from './api'
 import { ExportForm } from './components/ExportForm'
@@ -31,7 +31,7 @@ export default function App() {
   return (
     <Container className="py-10">
       <header className="mb-10">
-        <Heading as="h1" variant="display">
+        <Heading as="h1" variant={HeadingVariant.DISPLAY}>
           NBA data export
         </Heading>
         <p className="mt-3 max-w-2xl text-muted">
@@ -40,7 +40,7 @@ export default function App() {
         </p>
       </header>
 
-      {error && <Alert role="alert" variant={AlertVariant.Error} text={error} className="mb-6" />}
+      {error && <Alert tone={StatusTone.ERROR} text={error} className="mb-6" />}
 
       <div className="grid gap-10 lg:grid-cols-[3fr_2fr]">
         <Section id="new" title="New export" className="py-0">
