@@ -1,4 +1,4 @@
-import { Button } from 'denval-ui'
+import { Button, ButtonSize, ButtonVariant } from 'denval-ui'
 import type { ReactNode } from 'react'
 
 /** "2004-05" -> "2000s" */
@@ -37,11 +37,11 @@ export function SeasonPicker({
         </span>
       </legend>
       {value.length > 0 && (
-        <Button variant="ghost" size="sm" onClick={() => onChange([])} className="absolute -top-1 right-0 py-0.5">
+        <Button variant={ButtonVariant.GHOST} size={ButtonSize.SM} onClick={() => onChange([])} className="absolute -top-1 right-0 py-0.5">
           Clear
         </Button>
       )}
-      <div className="space-y-1.5 rounded-lg border border-border bg-surface p-2">
+      <div className="space-y-1.5 rounded-field border border-border bg-surface p-2">
         {[...decades].map(([name, list]) => (
           <div key={name} className="flex items-start gap-2">
             <span className="w-12 shrink-0 pt-1.5 text-caption text-subtle">{name}</span>
@@ -49,8 +49,8 @@ export function SeasonPicker({
               {[...list].reverse().map((season) => (
                 <Button
                   key={season}
-                  size="sm"
-                  variant={selected.has(season) ? 'solid' : 'ghost'}
+                  size={ButtonSize.SM}
+                  variant={selected.has(season) ? ButtonVariant.SOLID : ButtonVariant.GHOST}
                   aria-pressed={selected.has(season)}
                   onClick={() => toggle(season)}
                   className="px-2 tabular-nums"

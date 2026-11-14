@@ -1,7 +1,7 @@
-import { Alert, AlertVariant, Button } from 'denval-ui'
+import { Alert, Button, ButtonVariant, Input, Select, StatusTone, ToggleGroup } from 'denval-ui'
 import { useController, useForm, useWatch } from 'react-hook-form'
 import { api, type Dataset, type Format, type Job, type Options } from '../api'
-import { Field, inputClass, MultiToggle, SegmentedField } from './controls'
+import { SegmentedField } from './controls'
 import { SeasonPicker } from './SeasonPicker'
 
 const datasets: Record<Dataset, { label: string; description: string }> = {
@@ -101,19 +101,17 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
 
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-6">
-      <div>
-        <SegmentedField
-          control={control}
-          name="dataset"
-          label="Data"
-          choices={(Object.keys(datasets) as Dataset[]).map((value) => ({ value, label: datasets[value].label }))}
-        />
-        <p className="mt-2 text-label text-muted">{datasets[dataset].description}</p>
-      </div>
+      <SegmentedField
+        control={control}
+        name="dataset"
+        label="Data"
+        hint={<span className="text-label text-muted">{datasets[dataset].description}</span>}
+        options={(Object.keys(datasets) as Dataset[]).map((value) => ({ value, label: datasets[value].label }))}
+      />
 
       <SeasonPicker seasons={options.seasons} value={seasons} onChange={seasonsField.onChange} hint={seasonHint} />
 
-      <MultiToggle
+      <ToggleGroup
         label={
           <>
             Season types{' '}
@@ -123,34 +121,26 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
           </>
         }
         value={seasonTypesField.value}
-        choices={options.season_types.map((t) => ({ value: t, label: seasonTypeLabels[t] ?? t }))}
+        options={options.season_types.map((t) => ({ value: t, label: seasonTypeLabels[t] ?? t }))}
         onChange={seasonTypesField.onChange}
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="From date">
-          <input type="date" className={inputClass} {...register('dateFrom')} />
-        </Field>
-        <Field label="To date">
-          <input type="date" className={inputClass} {...register('dateTo')} />
-        </Field>
-        <Field label="Team">
-          <select className={inputClass} {...register('teamId')}>
-            <option value="">All teams</option>
-            {teamOptions}
-          </select>
-        </Field>
-        <Field label="Opponent">
-          <select className={inputClass} {...register('opponentId')}>
-            <option value="">Any opponent</option>
-            {teamOptions}
-          </select>
-        </Field>
+        <Input type="date" label="From date" {...register('dateFrom')} />
+        <Input type="date" label="To date" {...register('dateTo')} />
+        <Select label="Team" {...register('teamId')}>
+          <option value="">All teams</option>
+          {teamOptions}
+        </Select>
+        <Select label="Opponent" {...register('opponentId')}>
+          <option value="">Any opponent</option>
+          {teamOptions}
+        </Select>
         <SegmentedField
           control={control}
           name="location"
           label="Location (of the team)"
-          choices={[
+          options={[
             { value: '', label: 'Any' },
             { value: 'Home', label: 'Home' },
             { value: 'Road', label: 'Away' },
@@ -160,7 +150,7 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
           control={control}
           name="outcome"
           label="Outcome (of the team)"
-          choices={[
+          options={[
             { value: '', label: 'Any' },
             { value: 'W', label: 'Win' },
             { value: 'L', label: 'Loss' },
@@ -174,18 +164,18 @@ export function ExportForm({ options, onCreated }: { options: Options; onCreated
             control={control}
             name="format"
             label="File format"
-            choices={[
+            options={[
               { value: 'csv', label: 'CSV' },
               { value: 'json', label: 'JSON' },
             ]}
           />
         </div>
-        <Button type="submit" variant="solid" disabled={isSubmitting} className="ml-auto">
+        <Button type="submit" variant={ButtonVariant.SOLID} disabled={isSubmitting} className="ml-auto">
           {isSubmitting ? 'Starting…' : 'Start export'}
         </Button>
       </div>
 
-      {serverError && <Alert role="alert" variant={AlertVariant.Error} text={serverError} />}
+      {serverError && <Alert tone={StatusTone.ERROR} text={serverError} />}
     </form>
   )
 }

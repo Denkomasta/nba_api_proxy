@@ -1,13 +1,12 @@
-import { Button, Card, LinkButton, StatusBadge, type StatusBadgeProps } from 'denval-ui'
+import { Button, ButtonSize, ButtonVariant, Card, LinkButton, Progress, StatusBadge, StatusTone } from 'denval-ui'
 import { api, type Job, type JobStatus, type Team } from '../api'
 
-// denval-ui has no error tone, so "failed" recolours the neutral badge and its dot
-const statusBadge: Record<JobStatus, Pick<StatusBadgeProps, 'tone' | 'className'>> = {
-  queued: { tone: 'neutral' },
-  running: { tone: 'warning' },
-  done: { tone: 'success' },
-  failed: { className: 'text-red-700 dark:text-red-300 [&>span]:bg-red-500' },
-  cancelled: { tone: 'neutral' },
+const statusTone: Record<JobStatus, StatusTone> = {
+  queued: StatusTone.NEUTRAL,
+  running: StatusTone.WARNING,
+  done: StatusTone.SUCCESS,
+  failed: StatusTone.ERROR,
+  cancelled: StatusTone.NEUTRAL,
 }
 
 /** "Play-by-play · 2024-25 Regular Season + Playoffs · GSW vs LAL · Home" */
@@ -38,7 +37,6 @@ export function ExportList({ jobs, teams, onChanged }: { jobs: Job[]; teams: Tea
     <ul className="space-y-3">
       {jobs.map((job) => {
         const active = job.status === 'queued' || job.status === 'running'
-        const percent = job.total ? Math.round((job.done / job.total) * 100) : null
         return (
           <Card as="li" key={job.id} className="p-4">
             <div className="flex items-start gap-3">
@@ -48,18 +46,22 @@ export function ExportList({ jobs, teams, onChanged }: { jobs: Job[]; teams: Tea
                   {new Date(job.created_at * 1000).toLocaleString()} · {job.request.format.toUpperCase()}
                 </p>
               </div>
-              <StatusBadge {...statusBadge[job.status]}>{job.status}</StatusBadge>
+              <StatusBadge tone={statusTone[job.status]}>{job.status}</StatusBadge>
             </div>
 
-            {job.status === 'running' && percent !== null && (
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-fill">
-                <div className="h-full bg-accent transition-[width]" style={{ width: `${percent}%` }} />
-              </div>
+            {job.status === 'running' && (
+              // Moves back and forth until the total is known
+              <Progress
+                aria-label={`Progress of ${describe(job, byId)}`}
+                value={job.total ? job.done : null}
+                max={job.total || undefined}
+                className="mt-3"
+              />
             )}
 
             {(job.message || job.error) && (
               <p
-                className={`mt-2 text-label wrap-break-word ${job.error ? 'text-red-700 dark:text-red-300' : 'text-muted'}`}
+                className={`mt-2 text-label wrap-break-word ${job.error ? 'text-error' : 'text-muted'}`}
               >
                 {job.error ?? job.message}
               </p>
@@ -71,14 +73,14 @@ export function ExportList({ jobs, teams, onChanged }: { jobs: Job[]; teams: Tea
                   <LinkButton
                     href={api.downloadUrl(job.id)}
                     download={job.filename ?? undefined}
-                    variant="solid"
-                    size="sm"
+                    variant={ButtonVariant.SOLID}
+                    size={ButtonSize.SM}
                   >
                     Download
                   </LinkButton>
                 )}
                 {active && (
-                  <Button size="sm" onClick={() => api.cancel(job.id).then(onChanged)}>
+                  <Button size={ButtonSize.SM} onClick={() => api.cancel(job.id).then(onChanged)}>
                     Cancel
                   </Button>
                 )}
